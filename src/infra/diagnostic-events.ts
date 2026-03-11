@@ -33,6 +33,10 @@ export type DiagnosticUsageEvent = DiagnosticBaseEvent & {
     limit?: number;
     used?: number;
   };
+  promptPreview?: string;
+  responsePreview?: string;
+  promptPreviewTruncated?: boolean;
+  responsePreviewTruncated?: boolean;
   costUsd?: number;
   durationMs?: number;
 };

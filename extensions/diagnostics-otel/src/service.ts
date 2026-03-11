@@ -367,7 +367,7 @@ export function createDiagnosticsOtelService(): OpenClawPluginService {
 
       const spanWithDuration = (
         name: string,
-        attributes: Record<string, string | number>,
+        attributes: Record<string, string | number | boolean>,
         durationMs?: number,
       ) => {
         const startTime =
@@ -428,7 +428,7 @@ export function createDiagnosticsOtelService(): OpenClawPluginService {
         if (!tracesEnabled) {
           return;
         }
-        const spanAttrs: Record<string, string | number> = {
+        const spanAttrs: Record<string, string | number | boolean> = {
           ...attrs,
           "openclaw.sessionKey": evt.sessionKey ?? "",
           "openclaw.sessionId": evt.sessionId ?? "",
@@ -438,6 +438,22 @@ export function createDiagnosticsOtelService(): OpenClawPluginService {
           "openclaw.tokens.cache_write": usage.cacheWrite ?? 0,
           "openclaw.tokens.total": usage.total ?? 0,
         };
+        if (evt.promptPreview) {
+          const preview = redactSensitiveText(evt.promptPreview);
+          spanAttrs["openclaw.prompt.preview"] = preview;
+          spanAttrs["input"] = preview;
+        }
+        if (evt.responsePreview) {
+          const preview = redactSensitiveText(evt.responsePreview);
+          spanAttrs["openclaw.response.preview"] = preview;
+          spanAttrs["llm_result"] = preview;
+        }
+        if (typeof evt.promptPreviewTruncated === "boolean") {
+          spanAttrs["openclaw.prompt.truncated"] = evt.promptPreviewTruncated;
+        }
+        if (typeof evt.responsePreviewTruncated === "boolean") {
+          spanAttrs["openclaw.response.truncated"] = evt.responsePreviewTruncated;
+        }
 
         const span = spanWithDuration("openclaw.model.usage", spanAttrs, evt.durationMs);
         span.end();

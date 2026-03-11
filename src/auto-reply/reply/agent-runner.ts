@@ -59,6 +59,36 @@ import { createTypingSignaler } from "./typing-mode.js";
 import type { TypingController } from "./typing.js";
 
 const BLOCK_REPLY_SEND_TIMEOUT_MS = 15_000;
+const DIAGNOSTIC_PREVIEW_MAX_CHARS = 500;
+
+function buildDiagnosticPreview(value: string | undefined): {
+  preview?: string;
+  truncated: boolean;
+} {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return { truncated: false };
+  }
+  const normalized = trimmed.replace(/\s+/g, " ");
+  if (normalized.length <= DIAGNOSTIC_PREVIEW_MAX_CHARS) {
+    return { preview: normalized, truncated: false };
+  }
+  return {
+    preview: `${normalized.slice(0, DIAGNOSTIC_PREVIEW_MAX_CHARS)}…`,
+    truncated: true,
+  };
+}
+
+function extractTextPreviewFromPayloads(payloads: ReplyPayload[]): {
+  preview?: string;
+  truncated: boolean;
+} {
+  const combined = payloads
+    .map((payload) => (typeof payload.text === "string" ? payload.text.trim() : ""))
+    .filter((text) => text.length > 0)
+    .join("\n\n");
+  return buildDiagnosticPreview(combined);
+}
 
 export async function runReplyAgent(params: {
   commandBody: string;
@@ -550,6 +580,8 @@ export async function runReplyAgent(params: {
         config: cfg,
       });
       const costUsd = estimateUsageCost({ usage, cost: costConfig });
+      const promptPreview = buildDiagnosticPreview(commandBody);
+      const responsePreview = extractTextPreviewFromPayloads(payloadArray);
       emitDiagnosticEvent({
         type: "model.usage",
         sessionKey,
@@ -570,6 +602,10 @@ export async function runReplyAgent(params: {
           limit: contextTokensUsed,
           used: totalTokens,
         },
+        promptPreview: promptPreview.preview,
+        responsePreview: responsePreview.preview,
+        promptPreviewTruncated: promptPreview.truncated,
+        responsePreviewTruncated: responsePreview.truncated,
         costUsd,
         durationMs: Date.now() - runStartedAt,
       });

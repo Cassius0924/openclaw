@@ -366,4 +366,45 @@ describe("diagnostics-otel service", () => {
     );
     await service.stop?.(ctx);
   });
+
+  test("records redacted prompt/response preview attributes for model usage spans", async () => {
+    const service = createDiagnosticsOtelService();
+    const ctx = createOtelContext(OTEL_TEST_ENDPOINT, { traces: true });
+    await service.start(ctx);
+
+    emitDiagnosticEvent({
+      type: "model.usage",
+      channel: "telegram",
+      provider: "openai",
+      model: "gpt-5",
+      usage: {
+        input: 10,
+        output: 20,
+        total: 30,
+      },
+      promptPreview: "token=ghp_abcdefghijklmnopqrstuvwxyz123456",
+      responsePreview: "api key sk-1234567890abcdef1234567890abcdef",
+      promptPreviewTruncated: true,
+      responsePreviewTruncated: false,
+    });
+
+    const modelSpanCall = telemetryState.tracer.startSpan.mock.calls.find(
+      (call) => call[0] === "openclaw.model.usage",
+    );
+    const spanAttrs = (modelSpanCall?.[1] as { attributes?: Record<string, unknown> } | undefined)
+      ?.attributes;
+    const promptAttr = spanAttrs?.["openclaw.prompt.preview"];
+    const responseAttr = spanAttrs?.["openclaw.response.preview"];
+
+    expect(promptAttr).toBeTypeOf("string");
+    expect(responseAttr).toBeTypeOf("string");
+    expect(String(promptAttr)).toContain("…");
+    expect(String(responseAttr)).toContain("…");
+    expect(String(promptAttr)).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz123456");
+    expect(String(responseAttr)).not.toContain("sk-1234567890abcdef1234567890abcdef");
+    expect(spanAttrs?.["openclaw.prompt.truncated"]).toBe(true);
+    expect(spanAttrs?.["openclaw.response.truncated"]).toBe(false);
+
+    await service.stop?.(ctx);
+  });
 });
